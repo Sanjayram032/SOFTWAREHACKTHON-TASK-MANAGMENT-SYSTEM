@@ -111,7 +111,7 @@ const UserManagementPage = () => {
                   src={user.avatar}
                   alt={user.name}
                   className="w-9 h-9 rounded-full object-cover border border-slate-200 shrink-0"
-                  onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=3b82f6&color=fff`; }}
+                  onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=CBD5E1&color=1F2937`; }}
                 />
                 <div className="min-w-0">
                   <p className="text-xs font-bold text-slate-900 truncate">{user.name}</p>

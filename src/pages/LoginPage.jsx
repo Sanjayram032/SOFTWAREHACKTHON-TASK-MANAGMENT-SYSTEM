@@ -7,28 +7,51 @@ import ForgotPasswordModal from '../components/modals/ForgotPasswordModal';
 import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, GraduationCap } from 'lucide-react';
 
 const LoginPage = () => {
-  const { login, switchRole } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('arthur.p@university.edu');
   const [password, setPassword] = useState('password123');
   const [rolePreset, setRolePreset] = useState('admin');
+  const [error, setError] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
 
   const handleRolePresetSelect = (role) => {
     setRolePreset(role);
-    if (role === 'admin') setEmail('arthur.p@university.edu');
-    else if (role === 'staff') setEmail('sarah.j@university.edu');
-    else setEmail('alex.rivera@student.edu');
+    if (role === 'admin') {
+      setEmail('arthur.p@university.edu');
+      setPassword('password123');
+    } else if (role === 'staff') {
+      setEmail('sarah.j@university.edu');
+      setPassword('password123');
+    } else {
+      setEmail('alex.rivera@student.edu');
+      setPassword('password123');
+    }
   };
 
   const handleLoginSubmit = (e) => {
     e.preventDefault();
-    login(email, password, rolePreset);
+    const success = login(email, password);
+    if (!success) {
+      setError('Authentication failed. Please use a registered institutional email.');
+      return;
+    }
 
-    if (rolePreset === 'admin') navigate('/admin/dashboard');
-    else if (rolePreset === 'staff') navigate('/staff/dashboard');
-    else navigate('/student/dashboard');
+    setError('');
+    const normalizedEmail = email.toLowerCase();
+    if (normalizedEmail.includes('@student.edu')) {
+      navigate('/student/dashboard');
+    } else if (normalizedEmail.includes('@university.edu')) {
+      const staffEmails = ['sarah.j@university.edu', 'robert.c@university.edu', 'elena.r@university.edu', 'maya.s@university.edu'];
+      if (staffEmails.includes(normalizedEmail)) {
+        navigate('/staff/dashboard');
+      } else {
+        navigate('/admin/dashboard');
+      }
+    } else {
+      navigate('/');
+    }
   };
 
   return (
@@ -140,6 +163,9 @@ const LoginPage = () => {
             >
               Sign In to Dashboard
             </Button>
+            {error && (
+              <p className="text-sm text-rose-600 mt-2">{error}</p>
+            )}
           </form>
         </div>
 

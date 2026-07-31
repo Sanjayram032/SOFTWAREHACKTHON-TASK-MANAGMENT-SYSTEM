@@ -20,14 +20,15 @@ const Sidebar = ({ isOpen, onClose }) => {
   const { activeRole, currentUser } = useAuth();
   const { notifications } = useTask();
 
-  const unreadCount = notifications.filter(n => !n.read_status && (n.user_id === currentUser.id || activeRole === 'admin')).length;
+  const unreadCount = notifications.filter(
+    (n) => !n.read_status && (n.user_id === currentUser?.id || activeRole === 'admin')
+  ).length;
 
   const adminNav = [
     { label: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { label: 'Users', path: '/users', icon: Users },
+    { label: 'User Status', path: '/users', icon: Users },
     { label: 'Tasks', path: '/tasks', icon: CheckSquare },
     { label: 'Submissions', path: '/submissions', icon: FileCheck },
-    { label: 'Reports', path: '/reports', icon: BarChart3 },
     { label: 'Notifications', path: '/notifications', icon: Bell, badge: unreadCount },
     { label: 'Settings & Queries', path: '/settings', icon: Settings },
   ];
@@ -58,6 +59,10 @@ const Sidebar = ({ isOpen, onClose }) => {
   };
 
   const currentRoleInfo = roleLabels[activeRole] || roleLabels.admin;
+
+  if (!currentUser) {
+    return null;
+  }
 
   return (
     <>

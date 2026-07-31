@@ -43,11 +43,8 @@ const StudentDashboard = () => {
             Student Workspace
           </span>
           <h1 className="text-2xl font-black text-slate-900 mt-2">My Task Dashboard</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Track your assignments, upload proof, and monitor submission status.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Track your assignments and monitor submission status.</p>
         </div>
-        <Button variant="primary" icon={UploadCloud} onClick={() => { setSelectedTaskId(null); setUploadOpen(true); }}>
-          Upload Proof of Completion
-        </Button>
       </div>
 
       {/* Metric Cards */}

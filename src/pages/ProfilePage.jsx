@@ -24,34 +24,28 @@ const ProfilePage = () => {
   return (
     <div className="space-y-6">
       {/* Profile Hero Card */}
-      <Card className="!p-0 overflow-hidden">
-        {/* Banner */}
-        <div className="h-28 blue-gradient-bg relative" />
-
-        {/* Avatar + Info Section */}
-        <div className="px-6 pb-6 -mt-12">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-            <div className="flex items-end gap-4">
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-20 h-20 rounded-2xl object-cover border-4 border-white shadow-lg"
-                onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=3b82f6&color=fff&size=80`; }}
-              />
-              <div className="pb-1">
-                <h2 className="text-xl font-black text-slate-900">{currentUser.name}</h2>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border capitalize ${roleBadgeColors[activeRole]}`}>
-                    {activeRole}
-                  </span>
-                  <StatusBadge status={currentUser.status} />
-                </div>
+      <Card className="!p-6">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div className="flex items-end gap-4">
+            <img
+              src={currentUser.avatar}
+              alt={currentUser.name}
+              className="w-20 h-20 rounded-2xl object-cover border border-slate-200 shadow-sm"
+              onError={(e) => { e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name)}&background=CBD5E1&color=1F2937&size=80`; }}
+            />
+            <div className="pb-1">
+              <h2 className="text-xl font-black text-slate-900">{currentUser.name}</h2>
+              <div className="flex items-center gap-2 mt-1">
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border capitalize ${roleBadgeColors[activeRole]}`}>
+                  {activeRole}
+                </span>
+                <StatusBadge status={currentUser.status} />
               </div>
             </div>
-            <Button variant="outline" icon={Edit2} onClick={() => setEditOpen(true)}>
-              Edit Profile
-            </Button>
           </div>
+          <Button variant="outline" icon={Edit2} onClick={() => setEditOpen(true)}>
+            Edit Profile
+          </Button>
         </div>
       </Card>
 

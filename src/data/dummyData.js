@@ -95,6 +95,30 @@ export const initialUsers = [
     supervisor_id: 'u-4',
     phone: '+1 (555) 015-3321',
     joinedDate: '2024-09-01'
+  },
+  {
+    id: 'u-9',
+    name: 'Dr. Maya Singh',
+    email: 'maya.s@university.edu',
+    role: 'staff',
+    department: 'Cyber Security & Forensics',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    supervisor_id: 'u-1',
+    phone: '+1 (555) 013-6675',
+    joinedDate: '2025-01-10'
+  },
+  {
+    id: 'u-10',
+    name: 'Priya Natarajan',
+    email: 'priya.n@student.edu',
+    role: 'student',
+    department: 'Cyber Security & Forensics',
+    status: 'Active',
+    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
+    supervisor_id: 'u-9',
+    phone: '+1 (555) 012-8823',
+    joinedDate: '2025-09-01'
   }
 ];
 
@@ -189,6 +213,36 @@ export const initialTasks = [
     status: 'Rejected',
     parent_task_id: null,
     createdAt: '2026-07-15'
+  },
+  {
+    id: 'tsk-107',
+    title: 'Network Security Lab Audit',
+    description: 'Review firewall configuration logs and update cybersecurity compliance checklist for student labs.',
+    category: 'Subject Assignment',
+    priority: 'Medium',
+    deadline: '2026-08-18',
+    created_by: 'u-1',
+    assigned_to: 'u-9', // Dr. Maya Singh
+    assigned_to_name: 'Dr. Maya Singh',
+    assigned_to_role: 'staff',
+    status: 'Pending',
+    parent_task_id: null,
+    createdAt: '2026-07-28'
+  },
+  {
+    id: 'tsk-108',
+    title: 'Cybersecurity Certification Submission',
+    description: 'Upload your CompTIA Security+ or CEH proof document for departmental verification.',
+    category: 'Course Completion',
+    priority: 'High',
+    deadline: '2026-08-14',
+    created_by: 'u-9',
+    assigned_to: 'u-10',
+    assigned_to_name: 'Priya Natarajan',
+    assigned_to_role: 'student',
+    status: 'Pending',
+    parent_task_id: 'tsk-107',
+    createdAt: '2026-07-29'
   }
 ];
 
