@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebaseConfig';
 
 const AuthContext = createContext();
 
@@ -43,30 +45,15 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
-
-      let data = {};
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        const text = await response.text();
-        data = text ? { message: text } : {};
-      }
-
-      if (!response.ok) {
-        return { success: false, message: data.message || response.statusText || 'Login failed' };
-      }
-
-      localStorage.setItem('tms_token', data.token);
-      setCurrentUser(data.user);
-      return { success: true, user: data.user };
+      // Use Firebase Auth for email/password sign-in, then send ID token to backend for user provisioning
+      const credential = await signInWithEmailAndPassword(auth, email, password);
+      const idToken = await credential.user.getIdToken();
+      const result = await googleSignIn(idToken);
+      if (!result.success) return { success: false, message: result.message || 'Login failed' };
+      return { success: true, user: result.user };
     } catch (error) {
-      return { success: false, message: error.message || 'Unable to complete login request' };
+      const errorMessage = /auth\//i.test(error.code || '') ? error.message : (error.message || 'Unable to complete login request');
+      return { success: false, message: errorMessage };
     }
   };
 
@@ -88,7 +75,11 @@ export const AuthProvider = ({ children }) => {
       }
 
       if (!response.ok) {
-        return { success: false, message: data.message || response.statusText || 'Google sign-in failed' };
+        let errorMessage = data.message || response.statusText || 'Google sign-in failed';
+        if (response.status === 502 || /gateway/i.test(response.statusText || '')) {
+          errorMessage = 'Authentication server is not available. Start the backend server and try again.';
+        }
+        return { success: false, message: errorMessage };
       }
 
       if (data.needsRole) {
@@ -105,7 +96,10 @@ export const AuthProvider = ({ children }) => {
       setCurrentUser(data.user);
       return { success: true, user: data.user };
     } catch (error) {
-      return { success: false, message: error.message || 'Unable to complete Google sign-in request' };
+      const errorMessage = /failed to fetch|network|502|gateway/i.test(error.message || '')
+        ? 'Unable to reach the authentication server. Start the backend and try again.'
+        : error.message || 'Unable to complete Google sign-in request';
+      return { success: false, message: errorMessage };
     }
   };
 

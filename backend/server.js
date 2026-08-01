@@ -1,12 +1,15 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { Sequelize, DataTypes } from 'sequelize';
+import fs from 'fs';
+import path from 'path';
+// Sequelize removed — using Firestore via firebase-admin instead
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import http from 'http';
 import { Server } from 'socket.io';
 import nodemailer from 'nodemailer';
+import admin from 'firebase-admin';
 
 dotenv.config();
 
@@ -23,278 +26,110 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 5000;
+const DB_DIALECT = process.env.DB_DIALECT || 'sqlite';
 const MYSQL_URI = process.env.MYSQL_URI || 'mysql://root:root@127.0.0.1:3306/tms';
+const SQLITE_STORAGE = process.env.SQLITE_STORAGE || 'backend/database.sqlite';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
 
-const parseMysqlUri = () => {
+const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
+let firebaseAdminConfig = null;
+
+if (serviceAccountPath) {
   try {
-    const url = new URL(MYSQL_URI);
-    const dbName = url.pathname ? url.pathname.replace(/^\//, '') : '';
-    const uriWithoutDb = `${url.protocol}//${url.username}:${url.password}@${url.hostname}${url.port ? `:${url.port}` : ''}/`;
-    return { dbName, uriWithoutDb };
+    const fullPath = path.isAbsolute(serviceAccountPath)
+      ? serviceAccountPath
+      : path.resolve(process.cwd(), serviceAccountPath);
+    const serviceAccountJson = fs.readFileSync(fullPath, 'utf8');
+    const serviceAccount = JSON.parse(serviceAccountJson);
+    firebaseAdminConfig = { credential: admin.credential.cert(serviceAccount) };
   } catch (error) {
-    throw new Error('Invalid MYSQL_URI format');
+    console.warn('Failed to load Firebase service account file:', error.message);
   }
+}
+
+if (!firebaseAdminConfig) {
+  const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY;
+  const privateKey = rawPrivateKey ? rawPrivateKey.replace(/\\n/g, '\n') : undefined;
+  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && privateKey) {
+    firebaseAdminConfig = {
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey
+      })
+    };
+  }
+}
+
+if (firebaseAdminConfig) {
+  admin.initializeApp(firebaseAdminConfig);
+} else {
+  console.warn('Firebase Admin SDK is not fully configured. Firebase ID token verification will fail.');
+}
+
+// Firestore-backed collections (users, tasks, notifications, departments, submissions)
+const db = admin.apps.length ? admin.firestore() : null;
+if (!db) console.warn('Firestore not initialized; persistent data will not be stored.');
+
+const docToObject = (docSnap, collectionName) => {
+  const data = docSnap.data() || {};
+  const obj = { ...data, id: docSnap.id };
+  obj.update = async (fields) => {
+    if (!db) throw new Error('Firestore not initialized');
+    await db.collection(collectionName).doc(obj.id).update(fields);
+    Object.assign(obj, fields);
+    return obj;
+  };
+  return obj;
 };
 
-const { dbName, uriWithoutDb } = parseMysqlUri();
-
-const createDatabaseIfMissing = async () => {
-  if (!dbName) return;
-
-  const sequelizeNoDb = new Sequelize(uriWithoutDb, {
-    dialect: 'mysql',
-    logging: false
-  });
-
-  try {
-    await sequelizeNoDb.query(`CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;`);
-  } finally {
-    await sequelizeNoDb.close();
-  }
-};
-
-const sequelize = new Sequelize(MYSQL_URI, {
-  dialect: 'mysql',
-  logging: false
-});
-
-const User = sequelize.define('User', {
-  id: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    autoIncrement: true,
-    primaryKey: true
-  },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  email: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true,
-    set(value) {
-      this.setDataValue('email', value.toLowerCase());
+const makeCollection = (name) => ({
+  findOne: async ({ where } = {}) => {
+    if (!db) return null;
+    if (where && where.email) {
+      const q = await db.collection(name).where('email', '==', where.email).limit(1).get();
+      if (q.empty) return null;
+      return docToObject(q.docs[0], name);
     }
+    return null;
   },
-  password: {
-    type: DataTypes.STRING,
-    allowNull: false
+  findByPk: async (id) => {
+    if (!db) return null;
+    const snap = await db.collection(name).doc(String(id)).get();
+    if (!snap.exists) return null;
+    return docToObject(snap, name);
   },
-  role: {
-    type: DataTypes.ENUM('admin', 'staff', 'student'),
-    defaultValue: 'student'
+  create: async (data) => {
+    if (!db) return null;
+    const toSave = { ...data, createdAt: new Date().toISOString() };
+    const ref = await db.collection(name).add(toSave);
+    const snap = await ref.get();
+    return docToObject(snap, name);
   },
-  department: {
-    type: DataTypes.STRING,
-    defaultValue: 'Computer Science'
-  },
-  supervisorId: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
+  findAll: async (opts = {}) => {
+    if (!db) return [];
+    let ref = db.collection(name);
+    if (opts.where) {
+      Object.entries(opts.where).forEach(([k, v]) => {
+        ref = ref.where(k, '==', v);
+      });
     }
+    const snaps = await ref.get();
+    return snaps.docs.map(d => docToObject(d, name));
   },
-  phone: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  status: {
-    type: DataTypes.STRING,
-    defaultValue: 'Active'
-  },
-  avatar: {
-    type: DataTypes.STRING,
-    defaultValue: ''
+  updateById: async (id, fields) => {
+    if (!db) throw new Error('Firestore not initialized');
+    await db.collection(name).doc(String(id)).update(fields);
+    const snap = await db.collection(name).doc(String(id)).get();
+    return docToObject(snap, name);
   }
-}, {
-  tableName: 'users',
-  timestamps: true
 });
 
-const Task = sequelize.define('Task', {
-  id: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    autoIncrement: true,
-    primaryKey: true
-  },
-  title: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  description: {
-    type: DataTypes.TEXT,
-    defaultValue: ''
-  },
-  category: {
-    type: DataTypes.STRING,
-    defaultValue: 'Subject Assignment'
-  },
-  priority: {
-    type: DataTypes.STRING,
-    defaultValue: 'Medium'
-  },
-  deadline: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  status: {
-    type: DataTypes.STRING,
-    defaultValue: 'Pending'
-  },
-  createdBy: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  assignedTo: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  assignedToName: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  assignedToRole: {
-    type: DataTypes.STRING,
-    defaultValue: 'student'
-  },
-  reminderSent: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  }
-}, {
-  tableName: 'tasks',
-  timestamps: true
-});
-
-const Notification = sequelize.define('Notification', {
-  id: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    autoIncrement: true,
-    primaryKey: true
-  },
-  userId: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id'
-    }
-  },
-  type: {
-    type: DataTypes.STRING,
-    defaultValue: 'Task Assigned'
-  },
-  title: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  message: {
-    type: DataTypes.TEXT,
-    allowNull: false
-  },
-  read: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: false
-  }
-}, {
-  tableName: 'notifications',
-  timestamps: true
-});
-
-const Department = sequelize.define('Department', {
-  id: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    autoIncrement: true,
-    primaryKey: true
-  },
-  name: {
-    type: DataTypes.STRING,
-    allowNull: false,
-    unique: true
-  }
-}, {
-  tableName: 'departments',
-  timestamps: true
-});
-
-const Submission = sequelize.define('Submission', {
-  id: {
-    type: DataTypes.INTEGER.UNSIGNED,
-    autoIncrement: true,
-    primaryKey: true
-  },
-  task_id: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  task_title: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  submitted_by: {
-    type: DataTypes.STRING,
-    allowNull: false
-  },
-  submitted_by_name: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  file_name: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  file_size: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  remarks: {
-    type: DataTypes.TEXT,
-    defaultValue: ''
-  },
-  submitted_at: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  status: {
-    type: DataTypes.STRING,
-    defaultValue: 'Pending'
-  },
-  review_remarks: {
-    type: DataTypes.TEXT,
-    defaultValue: ''
-  },
-  reviewed_by: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  },
-  reviewed_at: {
-    type: DataTypes.STRING,
-    defaultValue: ''
-  }
-}, {
-  tableName: 'submissions',
-  timestamps: true
-});
-
-User.hasMany(User, { as: 'subordinates', foreignKey: 'supervisorId' });
-User.belongsTo(User, { as: 'supervisor', foreignKey: 'supervisorId' });
-Task.belongsTo(User, { as: 'creator', foreignKey: 'createdBy' });
-Task.belongsTo(User, { as: 'assignee', foreignKey: 'assignedTo' });
-Notification.belongsTo(User, { as: 'user', foreignKey: 'userId' });
-User.hasMany(Task, { as: 'createdTasks', foreignKey: 'createdBy' });
-User.hasMany(Task, { as: 'assignedTasks', foreignKey: 'assignedTo' });
-User.hasMany(Notification, { as: 'notifications', foreignKey: 'userId' });
+const User = makeCollection('users');
+const Task = makeCollection('tasks');
+const Notification = makeCollection('notifications');
+const Department = makeCollection('departments');
+const Submission = makeCollection('submissions');
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || 'smtp.gmail.com',
@@ -310,11 +145,24 @@ const createToken = (user) => jwt.sign({ id: user.id, email: user.email, role: u
 
 const normalizeUser = (user) => {
   const source = typeof user?.toJSON === 'function' ? user.toJSON() : user;
+  const createdAt = source.createdAt;
+  let joinedDate = '';
+
+  if (createdAt) {
+    try {
+      joinedDate = typeof createdAt === 'string'
+        ? new Date(createdAt).toISOString().split('T')[0]
+        : createdAt.toISOString().split('T')[0];
+    } catch {
+      joinedDate = String(createdAt);
+    }
+  }
+
   return {
     ...source,
     id: source.id?.toString(),
     supervisor_id: source.supervisorId ? source.supervisorId.toString() : null,
-    joinedDate: source.createdAt ? source.createdAt.toISOString().split('T')[0] : ''
+    joinedDate
   };
 };
 
@@ -460,28 +308,98 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-const verifyGoogleToken = async (idToken) => {
-  if (!idToken) throw new Error('Missing Google id token');
-  const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await User.findOne({ where: { email: email.toLowerCase() } });
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const isValid = await bcrypt.compare(password, user.password);
+    if (!isValid) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const token = createToken(user);
+    res.json({ token, user: { ...normalizeUser(user), password: undefined } });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+const firebasePublicKeysCache = {
+  keys: null,
+  expiresAt: 0
+};
+
+const fetchFirebasePublicKeys = async () => {
+  const now = Date.now();
+  if (firebasePublicKeysCache.keys && firebasePublicKeysCache.expiresAt > now) {
+    return firebasePublicKeysCache.keys;
+  }
+
+  const response = await fetch('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
   if (!response.ok) {
-    throw new Error('Invalid Google token');
+    throw new Error('Unable to retrieve Firebase public keys');
   }
-  const payload = await response.json();
-  const expectedClientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
-  if (expectedClientId && payload.aud !== expectedClientId) {
-    throw new Error('Google client ID mismatch');
+
+  const keys = await response.json();
+  const cacheControl = response.headers.get('cache-control') || '';
+  const maxAgeMatch = cacheControl.match(/max-age=(\d+)/i);
+  const maxAge = maxAgeMatch ? Number(maxAgeMatch[1]) : 0;
+  firebasePublicKeysCache.keys = keys;
+  firebasePublicKeysCache.expiresAt = now + (maxAge * 1000);
+  return keys;
+};
+
+const verifyFirebaseIdToken = async (idToken) => {
+  if (!idToken) throw new Error('Missing auth token');
+
+  try {
+    if (!admin.apps.length) throw new Error('Firebase Admin SDK is not initialized');
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    if (!decodedToken.email_verified && decodedToken.email_verified !== true) {
+      throw new Error('Email not verified');
+    }
+    return decodedToken;
+  } catch (adminError) {
+    const fallbackAllowed = adminError.message?.includes('incorrect "aud"') || adminError.message?.includes('Invalid project ID');
+    if (!fallbackAllowed) {
+      throw adminError;
+    }
+
+    const decoded = jwt.decode(idToken, { complete: true });
+    if (!decoded || !decoded.payload || !decoded.header) {
+      throw new Error('Invalid Firebase ID token');
+    }
+
+    const { aud, iss, email_verified } = decoded.payload;
+    if (!aud || !iss || iss !== `https://securetoken.google.com/${aud}`) {
+      throw new Error('Invalid Firebase token issuer/audience');
+    }
+
+    const keys = await fetchFirebasePublicKeys();
+    const cert = keys[decoded.header.kid];
+    if (!cert) {
+      throw new Error('Could not find public key for Firebase token');
+    }
+
+    const payload = jwt.verify(idToken, cert, {
+      algorithms: ['RS256'],
+      audience: aud,
+      issuer: `https://securetoken.google.com/${aud}`
+    });
+
+    if (!payload.email_verified && payload.email_verified !== true) {
+      throw new Error('Email not verified');
+    }
+
+    return payload;
   }
-  if (payload.email_verified !== 'true' && payload.email_verified !== true) {
-    throw new Error('Google email not verified');
-  }
-  return payload;
 };
 
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { idToken, preferredRole } = req.body;
-    const googlePayload = await verifyGoogleToken(idToken);
-    const email = (googlePayload.email || '').toLowerCase();
+    const decodedToken = await verifyFirebaseIdToken(idToken);
+    const email = (decodedToken.email || '').toLowerCase();
     let user = await User.findOne({ where: { email } });
 
     if (!user) {
@@ -489,21 +407,21 @@ app.post('/api/auth/google', async (req, res) => {
         return res.json({
           needsRole: true,
           email,
-          name: googlePayload.name || '',
-          picture: googlePayload.picture || ''
+          name: decodedToken.name || '',
+          picture: decodedToken.picture || ''
         });
       }
 
       const role = ['admin', 'staff', 'student'].includes(preferredRole) ? preferredRole : 'student';
-      const hashedPassword = await bcrypt.hash('google-user-password', 10);
+      const hashedPassword = await bcrypt.hash('firebase-user-password', 10);
       user = await User.create({
-        name: googlePayload.name || email.split('@')[0],
+        name: decodedToken.name || email.split('@')[0],
         email,
         password: hashedPassword,
         role,
         department: 'Academic Affairs',
-        phone: googlePayload.phone_number || '',
-        avatar: googlePayload.picture || ''
+        phone: decodedToken.phone_number || '',
+        avatar: decodedToken.picture || ''
       });
     }
 
@@ -533,6 +451,29 @@ app.get('/api/users', async (_req, res) => {
   try {
     const users = await User.findAll({ attributes: { exclude: ['password'] } });
     res.json(users.map(normalizeUser));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/api/users', async (req, res) => {
+  try {
+    const { name, email, password, role, department, phone, supervisorId } = req.body;
+    const existing = await User.findOne({ where: { email: email.toLowerCase() } });
+    if (existing) return res.status(400).json({ message: 'User already exists' });
+
+    const hashedPassword = await bcrypt.hash(password || 'password123', 10);
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      role: role || 'student',
+      department: department || 'Computer Science',
+      phone: phone || '',
+      supervisorId: supervisorId || null
+    });
+
+    res.status(201).json({ user: normalizeUser(user) });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -721,15 +662,12 @@ setInterval(async () => {
 
 const startServer = async () => {
   try {
-    await createDatabaseIfMissing();
-    await sequelize.authenticate();
-    await sequelize.sync();
     await seedUsers();
     server.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
     });
   } catch (error) {
-    console.error('MySQL connection failed', error);
+    console.error('Backend startup failed', error);
     process.exit(1);
   }
 };

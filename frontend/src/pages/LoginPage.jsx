@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/common/Input';
@@ -6,6 +6,8 @@ import Button from '../components/common/Button';
 import ForgotPasswordModal from '../components/modals/ForgotPasswordModal';
 import RoleSelectionModal from '../components/modals/RoleSelectionModal';
 import { Lock, Mail, ArrowRight } from 'lucide-react';
+import { signInWithRedirect, getRedirectResult, onAuthStateChanged } from 'firebase/auth';
+import { auth, provider } from '../firebaseConfig';
 
 const LoginPage = () => {
   const { login, googleSignIn } = useAuth();
@@ -17,83 +19,94 @@ const LoginPage = () => {
   const [googleError, setGoogleError] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
   const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [roleSelectionMode, setRoleSelectionMode] = useState('');
   const [pendingGoogleToken, setPendingGoogleToken] = useState('');
   const [googleCandidateEmail, setGoogleCandidateEmail] = useState('');
-  const [googleClientId] = useState(import.meta.env.VITE_GOOGLE_CLIENT_ID || '');
+  const [isRedirectProcessing, setIsRedirectProcessing] = useState(false);
+  const GOOGLE_ROLE_KEY = 'tms_google_role';
 
   useEffect(() => {
-    if (!googleClientId) return;
+    const cleanup = onAuthStateChanged(auth, async (user) => {
+      if (!user || isRedirectProcessing) return;
 
-    const renderButton = () => {
-      if (!window.google?.accounts?.id) return;
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: handleGoogleCredentialResponse,
-        ux_mode: 'popup'
-      });
-      window.google.accounts.id.renderButton(document.getElementById('google-signin-button'), {
-        theme: 'outline',
-        size: 'large',
-        text: 'signin_with',
-        shape: 'rectangular'
-      });
-    };
+      try {
+        setIsRedirectProcessing(true);
+        const result = await getRedirectResult(auth);
+        const redirectUser = result?.user || user;
+        if (!redirectUser) return;
 
-    const existingScript = document.getElementById('google-client-script');
-    if (existingScript) {
-      renderButton();
-      return;
-    }
+        const idToken = await redirectUser.getIdToken();
+        const preferredRole = localStorage.getItem(GOOGLE_ROLE_KEY) || undefined;
+        if (preferredRole) {
+          localStorage.removeItem(GOOGLE_ROLE_KEY);
+        }
 
-    const script = document.createElement('script');
-    script.id = 'google-client-script';
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    script.onload = renderButton;
-    script.onerror = () => setGoogleError('Failed to load Google sign-in.');
-    document.body.appendChild(script);
-  }, [googleClientId]);
+        const response = await googleSignIn(idToken, preferredRole);
 
-  const handleGoogleCredentialResponse = async (credentialResponse) => {
+        if (response.needsRole) {
+          setPendingGoogleToken(idToken);
+          setGoogleCandidateEmail(response.email || '');
+          setRoleSelectionMode('postSignIn');
+          setRoleModalOpen(true);
+          return;
+        }
+
+        if (!response.success) {
+          setGoogleError(response.message || 'Google sign-in failed.');
+          return;
+        }
+
+        const role = response.user?.role || 'student';
+        if (role === 'student') {
+          navigate('/student/dashboard');
+        } else if (role === 'staff') {
+          navigate('/staff/dashboard');
+        } else {
+          navigate('/admin/dashboard');
+        }
+      } catch (error) {
+        setGoogleError(error.message || 'Google sign-in failed.');
+      } finally {
+        setIsRedirectProcessing(false);
+      }
+    });
+
+    return () => cleanup();
+  }, [googleSignIn, navigate, isRedirectProcessing]);
+
+  const handleGoogleSignIn = async () => {
     setError('');
     setGoogleError('');
+    setRoleSelectionMode('preSignIn');
+    setRoleModalOpen(true);
+  };
 
-    if (!credentialResponse?.credential) {
-      setGoogleError('Google sign-in failed.');
-      return;
+  const handleRoleModalClose = () => {
+    setRoleModalOpen(false);
+    setRoleSelectionMode('');
+    if (roleSelectionMode === 'preSignIn') {
+      localStorage.removeItem(GOOGLE_ROLE_KEY);
     }
-
-    const result = await googleSignIn(credentialResponse.credential);
-    if (result.needsRole) {
-      setPendingGoogleToken(credentialResponse.credential);
-      setGoogleCandidateEmail(result.email || '');
-      setRoleModalOpen(true);
-      return;
-    }
-
-    if (!result.success) {
-      setGoogleError(result.message || 'Google sign-in failed.');
-      return;
-    }
-
-    const normalizedEmail = (result.user?.email || '').toLowerCase();
-    if (normalizedEmail.includes('@student.edu')) {
-      navigate('/student/dashboard');
-    } else if (normalizedEmail.includes('@university.edu')) {
-      if ((result.user?.role || 'admin') === 'staff') {
-        navigate('/staff/dashboard');
-      } else {
-        navigate('/admin/dashboard');
-      }
-    } else {
-      navigate('/');
-    }
+    setPendingGoogleToken('');
+    setGoogleCandidateEmail('');
   };
 
   const handleRoleConfirm = async (role) => {
     setGoogleError('');
     setError('');
+
+    if (roleSelectionMode === 'preSignIn') {
+      localStorage.setItem(GOOGLE_ROLE_KEY, role);
+      setRoleModalOpen(false);
+      setRoleSelectionMode('');
+
+      try {
+        await signInWithRedirect(auth, provider);
+      } catch (error) {
+        setGoogleError(error.message || 'Google sign-in failed.');
+      }
+      return;
+    }
 
     if (!pendingGoogleToken) {
       setGoogleError('Unable to complete Google login. Please try again.');
@@ -108,18 +121,14 @@ const LoginPage = () => {
 
     setRoleModalOpen(false);
     setPendingGoogleToken('');
+    setRoleSelectionMode('');
 
-    const normalizedEmail = (result.user?.email || '').toLowerCase();
-    if (normalizedEmail.includes('@student.edu')) {
+    if (result.user?.role === 'student') {
       navigate('/student/dashboard');
-    } else if (normalizedEmail.includes('@university.edu')) {
-      if ((result.user?.role || 'admin') === 'staff') {
-        navigate('/staff/dashboard');
-      } else {
-        navigate('/admin/dashboard');
-      }
+    } else if (result.user?.role === 'staff') {
+      navigate('/staff/dashboard');
     } else {
-      navigate('/');
+      navigate('/admin/dashboard');
     }
   };
 
@@ -212,14 +221,18 @@ const LoginPage = () => {
             >
               Sign In to Dashboard
             </Button>
-            {googleClientId ? (
-              <div className="mt-4">
-                <div id="google-signin-button" />
-                {googleError && <p className="text-sm text-rose-600 mt-2">{googleError}</p>}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400 mt-3">Google sign-in is not configured yet.</p>
-            )}
+            <div className="mt-4">
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                className="w-full"
+                onClick={handleGoogleSignIn}
+              >
+                Sign in with Google
+              </Button>
+              {googleError && <p className="text-sm text-rose-600 mt-2">{googleError}</p>}
+            </div>
             {error && (
               <p className="text-sm text-rose-600 mt-2">{error}</p>
             )}
@@ -266,7 +279,7 @@ const LoginPage = () => {
       <ForgotPasswordModal isOpen={forgotOpen} onClose={() => setForgotOpen(false)} />
       <RoleSelectionModal
         isOpen={roleModalOpen}
-        onClose={() => setRoleModalOpen(false)}
+        onClose={handleRoleModalClose}
         onConfirm={handleRoleConfirm}
         email={googleCandidateEmail}
       />
