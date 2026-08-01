@@ -48,16 +48,26 @@ const UploadProofModal = ({ isOpen, onClose, defaultTaskId = null }) => {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.task_id) {
       setErrors({ task_id: 'Please select a task to upload proof for' });
       return;
     }
 
-    submitProof(formData, currentUser);
-    onClose();
-    setSelectedFile(null);
+    const submissionPayload = {
+      ...formData,
+      task_title: selectedTask?.title || '',
+      task_id: selectedTask?.id || formData.task_id
+    };
+
+    try {
+      await submitProof(submissionPayload, currentUser);
+      onClose();
+      setSelectedFile(null);
+    } catch (error) {
+      alert(error.message || 'Failed to submit proof. Please try again.');
+    }
   };
 
   return (

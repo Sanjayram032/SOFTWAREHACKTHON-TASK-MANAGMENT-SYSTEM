@@ -152,63 +152,8 @@ const sendPendingTaskEmail = async (task) => {
 };
 
 const seedUsers = async () => {
-  const existing = await User.countDocuments();
-  if (existing > 0) return;
-
-  const hashedPassword = await bcrypt.hash('password123', 10);
-  const admin = await User.create({
-    name: 'Arthur Peterson',
-    email: 'arthur.p@university.edu',
-    password: hashedPassword,
-    role: 'admin',
-    department: 'Academic Affairs',
-    phone: '+1 555 0100',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150'
-  });
-
-  const staff = await User.create({
-    name: 'Sarah Johnson',
-    email: 'sarah.j@university.edu',
-    password: hashedPassword,
-    role: 'staff',
-    department: 'Computer Science',
-    supervisorId: admin._id,
-    phone: '+1 555 0101',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150'
-  });
-
-  const student = await User.create({
-    name: 'Alex Rivera',
-    email: 'alex.rivera@student.edu',
-    password: hashedPassword,
-    role: 'student',
-    department: 'Computer Science',
-    supervisorId: staff._id,
-    phone: '+1 555 0102',
-    avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150'
-  });
-
-  await Task.create({
-    title: 'Complete faculty evaluation report',
-    description: 'Review the semester faculty evaluation report.',
-    category: 'Course Completion',
-    priority: 'High',
-    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'Pending',
-    createdBy: admin._id,
-    assignedTo: staff._id,
-    assignedToName: staff.name,
-    assignedToRole: staff.role
-  });
-
-  await Notification.create({
-    userId: admin._id,
-    type: 'Task Assigned',
-    title: 'Welcome',
-    message: 'The system is ready. Use your institutional credentials to sign in.'
-  });
-
-  console.log('Seeded demo users');
+  // Demo seeding disabled. The application now relies on Google-authenticated users.
+  return;
 };
 
 io.on('connection', (socket) => {

@@ -15,22 +15,32 @@ import {
   Plus, 
   UserPlus, 
   FileText, 
-  AlertCircle 
+  AlertCircle, 
+  Eye 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import ReviewSubmissionModal from '../components/modals/ReviewSubmissionModal';
 
 const AdminDashboard = () => {
-  const { users, tasks, queries } = useTask();
+  const { users, tasks, queries, submissions } = useTask();
   const { currentUser } = useAuth();
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [addUserOpen, setAddUserOpen] = useState(false);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
 
   const totalStaff = users.filter(u => u.role === 'staff').length;
   const totalStudents = users.filter(u => u.role === 'student').length;
   const activeTasks = tasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length;
+  const pendingReviews = submissions.filter(s => s.status === 'Pending').length;
+  const approvedReviews = submissions.filter(s => s.status === 'Approved').length;
+  const rejectedReviews = submissions.filter(s => s.status === 'Rejected').length;
   const completedTasks = tasks.filter(t => t.status === 'Completed').length;
 
   const recentTasks = tasks;
+  const studentSubmissionTasks = submissions.map((sub) => ({
+    ...sub,
+    task: tasks.find((task) => task.id === sub.task_id || task._id === sub.task_id)
+  }));
 
   return (
     <div className="space-y-8">
@@ -44,7 +54,10 @@ const AdminDashboard = () => {
           <p className="text-xs text-slate-500 mt-0.5">Overview of staff performance, active delegations, and escalations.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" icon={FileText} onClick={() => window.location.assign('/submissions')}>
+            Review Submissions
+          </Button>
           <Button variant="outline" icon={UserPlus} onClick={() => setAddUserOpen(true)}>
             Add User
           </Button>
@@ -93,6 +106,45 @@ const AdminDashboard = () => {
             </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-3">Pending or in progress</p>
+        </Card>
+
+        <Card hover={true}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pending Reviews</p>
+              <h3 className="text-3xl font-black text-amber-600 mt-1">{pendingReviews}</h3>
+            </div>
+            <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
+              <FileText className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3">Student proof awaiting review</p>
+        </Card>
+
+        <Card hover={true}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Approved Reviews</p>
+              <h3 className="text-3xl font-black text-emerald-600 mt-1">{approvedReviews}</h3>
+            </div>
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+              <CheckCircle2 className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3">Submissions signed off</p>
+        </Card>
+
+        <Card hover={true}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Rejected Reviews</p>
+              <h3 className="text-3xl font-black text-rose-600 mt-1">{rejectedReviews}</h3>
+            </div>
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3">Resubmissions required</p>
         </Card>
 
         <Card hover={true}>
@@ -147,6 +199,66 @@ const AdminDashboard = () => {
         />
       </Card>
 
+      {/* Review Submissions Section */}
+      <Card 
+        title="Review Student Submissions" 
+        subtitle="Approve or reject proof uploads from students"
+        action={
+          <Link to="/submissions" className="text-xs font-bold text-blue-600 hover:underline">
+            Open Full Review Page →
+          </Link>
+        }
+      >
+        <Table
+          columns={[
+            { header: 'Task Title' },
+            { header: 'Submitted By' },
+            { header: 'Deadline' },
+            { header: 'Status' },
+            { header: 'Actions' }
+          ]}
+          data={studentSubmissionTasks}
+          emptyText="No student submissions available."
+          renderRow={(item) => {
+            const creator = users.find((u) => u.id === item.task?.created_by || u._id === item.task?.created_by || u.id === item.task?.createdBy || u._id === item.task?.createdBy);
+            const assignedStudentTask = item.task && ((item.task.assigned_to_role === 'student' || item.task.assignedToRole === 'student') || (item.task.assigned_to === item.submitted_by || item.task.assignedTo === item.submitted_by));
+            const isStaffAssignedStudentTask = assignedStudentTask && creator?.role === 'staff';
+            const canReview = !isStaffAssignedStudentTask;
+
+            return (
+              <>
+                <td className="px-4 py-3.5 font-bold text-slate-900 text-xs max-w-52">
+                  <span className="line-clamp-2">{item.task?.title || item.task_title}</span>
+                </td>
+                <td className="px-4 py-3.5 text-xs text-slate-800 font-semibold">{item.submitted_by_name}</td>
+                <td className="px-4 py-3.5 text-xs text-slate-600">{item.task?.deadline || item.submitted_at}</td>
+                <td className="px-4 py-3.5 whitespace-nowrap"><StatusBadge status={item.status} /></td>
+                <td className="px-4 py-3.5">
+                  {canReview ? (
+                    <Button
+                      size="sm"
+                      variant={item.status === 'Rejected' ? 'danger' : 'outline'}
+                      icon={Eye}
+                      onClick={() => setSelectedSubmission(item)}
+                    >
+                      Review Proof
+                    </Button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSubmission(item)}
+                      className="text-xs text-blue-600 hover:underline font-medium"
+                    >
+                      View Status
+                    </button>
+                  )}
+                </td>
+              </>
+            );
+          }}
+        />
+      </Card>
+
       {/* Staff Escalations / Query Queue Box */}
       <Card 
         title="Staff Query & Escalation Queue" 
@@ -188,6 +300,13 @@ const AdminDashboard = () => {
       {/* Modals */}
       <CreateTaskModal isOpen={createTaskOpen} onClose={() => setCreateTaskOpen(false)} />
       <AddUserModal isOpen={addUserOpen} onClose={() => setAddUserOpen(false)} />
+      {selectedSubmission && (
+        <ReviewSubmissionModal
+          isOpen={!!selectedSubmission}
+          onClose={() => setSelectedSubmission(null)}
+          submission={selectedSubmission}
+        />
+      )}
     </div>
   );
 };

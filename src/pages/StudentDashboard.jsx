@@ -26,6 +26,7 @@ const StudentDashboard = () => {
   );
   const pendingTasks = myTasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length;
   const completedTasks = myTasks.filter(t => t.status === 'Completed').length;
+  const rejectedTasks = myTasks.filter(t => t.status === 'Rejected').length;
   const upcomingDeadlines = myTasks.filter(t => {
     const diff = (new Date(t.deadline) - new Date()) / (1000 * 60 * 60 * 24);
     return diff >= 0 && diff <= 7 && t.status !== 'Completed';
@@ -51,7 +52,7 @@ const StudentDashboard = () => {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-5">
         <Card hover={true}>
           <div className="flex items-center justify-between">
             <div>
@@ -76,6 +77,19 @@ const StudentDashboard = () => {
             </div>
           </div>
           <p className="text-[11px] text-slate-500 mt-3">Proof approved by supervisor</p>
+        </Card>
+
+        <Card hover={true}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Rejected Tasks</p>
+              <h3 className="text-3xl font-black text-rose-600 mt-1">{rejectedTasks}</h3>
+            </div>
+            <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3">Resubmission required</p>
         </Card>
 
         <Card hover={true}>

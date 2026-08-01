@@ -7,22 +7,41 @@ import { useAuth } from '../../context/AuthContext';
 import { FileText, CheckCircle, XCircle, Download } from 'lucide-react';
 
 const ReviewSubmissionModal = ({ isOpen, onClose, submission }) => {
-  const { reviewSubmission } = useTask();
-  const { currentUser } = useAuth();
+  const { reviewSubmission, tasks, users } = useTask();
+  const { currentUser, activeRole } = useAuth();
   const [remarks, setRemarks] = useState('');
 
   if (!submission) return null;
 
-  const handleApprove = () => {
-    reviewSubmission(submission.id, 'Approved', remarks || 'Verified and approved.', currentUser);
-    onClose();
-    setRemarks('');
+  const task = tasks.find((t) => t.id === submission.task_id || t._id === submission.task_id);
+  const creator = users.find((u) => u.id === task?.created_by || u._id === task?.created_by || u.id === task?.createdBy || u._id === task?.createdBy);
+  const assignedStudentTask = task && (
+    task.assigned_to_role === 'student' ||
+    task.assignedToRole === 'student' ||
+    task.assigned_to === submission.submitted_by ||
+    task.assignedTo === submission.submitted_by
+  );
+  const isStaffAssignedStudentTask = assignedStudentTask && creator?.role === 'staff';
+  const canReview = activeRole === 'staff' || (activeRole === 'admin' && !isStaffAssignedStudentTask);
+
+  const handleApprove = async () => {
+    try {
+      await reviewSubmission(submission.id, 'Approved', remarks || 'Verified and approved.', currentUser);
+      onClose();
+      setRemarks('');
+    } catch (error) {
+      alert(error.message || 'Unable to approve submission.');
+    }
   };
 
-  const handleReject = () => {
-    reviewSubmission(submission.id, 'Rejected', remarks || 'Needs correction and resubmission.', currentUser);
-    onClose();
-    setRemarks('');
+  const handleReject = async () => {
+    try {
+      await reviewSubmission(submission.id, 'Rejected', remarks || 'Needs correction and resubmission.', currentUser);
+      onClose();
+      setRemarks('');
+    } catch (error) {
+      alert(error.message || 'Unable to reject submission.');
+    }
   };
 
   return (
@@ -83,25 +102,31 @@ const ReviewSubmissionModal = ({ isOpen, onClose, submission }) => {
         {/* Action Buttons */}
         <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-100">
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            Close
           </Button>
 
-          <div className="flex items-center gap-2">
-            <Button 
-              variant="danger" 
-              icon={XCircle} 
-              onClick={handleReject}
-            >
-              Reject Submission
-            </Button>
-            <Button 
-              variant="success" 
-              icon={CheckCircle} 
-              onClick={handleApprove}
-            >
-              Approve Submission
-            </Button>
-          </div>
+          {canReview ? (
+            <div className="flex items-center gap-2">
+              <Button 
+                variant="danger" 
+                icon={XCircle} 
+                onClick={handleReject}
+              >
+                Reject Submission
+              </Button>
+              <Button 
+                variant="success" 
+                icon={CheckCircle} 
+                onClick={handleApprove}
+              >
+                Approve Submission
+              </Button>
+            </div>
+          ) : (
+            <div className="text-sm text-slate-500">
+              Only staff and admin can approve or reject submissions.
+            </div>
+          )}
         </div>
       </div>
     </Modal>

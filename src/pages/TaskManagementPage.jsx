@@ -7,18 +7,20 @@ import Table from '../components/common/Table';
 import StatusBadge from '../components/common/StatusBadge';
 import CreateTaskModal from '../components/modals/CreateTaskModal';
 import { Input, Select } from '../components/common/Input';
-import { Plus, Search, Filter, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Edit2, Trash2, Eye } from 'lucide-react';
+import ReviewSubmissionModal from '../components/modals/ReviewSubmissionModal';
 
 const CATEGORIES = ['All', 'Course Completion', 'Subject Assignment', 'Monthly Meeting', 'Event Attendance', 'Custom Category'];
 const PRIORITIES = ['All', 'High', 'Medium', 'Low'];
 const STATUSES = ['All', 'Pending', 'In Progress', 'Completed', 'Overdue', 'Rejected'];
 
 const TaskManagementPage = () => {
-  const { tasks } = useTask();
+  const { tasks, submissions } = useTask();
   const { currentUser, activeRole } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [taskSection, setTaskSection] = useState('admin');
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
   const currentUserId = currentUser?._id || currentUser?.id;
 
   const adminAssignedTasks = tasks.filter((task) =>
@@ -38,6 +40,11 @@ const TaskManagementPage = () => {
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterPriority, setFilterPriority] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
+
+  const taskSubmissionMap = submissions.reduce((map, submission) => {
+    map[submission.task_id || submission.taskId] = submission;
+    return map;
+  }, {});
 
   const filtered = visibleTasks.filter(t => {
     const matchSearch = t.title.toLowerCase().includes(search.toLowerCase()) || 
@@ -184,16 +191,28 @@ const TaskManagementPage = () => {
               <StatusBadge status={task.status} />
             </td>
             <td className="px-4 py-3.5">
-              <div className="flex items-center gap-1">
-                {activeRole !== 'student' && (
-                  <button className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Task">
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {activeRole === 'staff' && taskSubmissionMap[task.id] && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon={Eye}
+                    onClick={() => setSelectedSubmission(taskSubmissionMap[task.id])}
+                  >
+                    Review Proof
+                  </Button>
                 )}
-                {activeRole === 'admin' && (
-                  <button className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Task">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                {activeRole !== 'staff' && activeRole !== 'student' && (
+                  <div className="flex items-center gap-1">
+                    <button className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit Task">
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    {activeRole === 'admin' && (
+                      <button className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Delete Task">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 )}
                 {activeRole === 'student' && (
                   <span className="text-[11px] text-slate-400 italic">View only</span>
@@ -205,6 +224,13 @@ const TaskManagementPage = () => {
       />
 
       <CreateTaskModal isOpen={createOpen} onClose={() => setCreateOpen(false)} />
+      {selectedSubmission && (
+        <ReviewSubmissionModal
+          isOpen={!!selectedSubmission}
+          onClose={() => setSelectedSubmission(null)}
+          submission={selectedSubmission}
+        />
+      )}
     </div>
   );
 };

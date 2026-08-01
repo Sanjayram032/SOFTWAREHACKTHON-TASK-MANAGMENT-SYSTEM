@@ -20,17 +20,19 @@ export const TaskProvider = ({ children }) => {
 
     const headers = { Authorization: `Bearer ${token}` };
     try {
-      const [usersRes, tasksRes, notificationsRes, departmentsRes] = await Promise.all([
+      const [usersRes, tasksRes, notificationsRes, departmentsRes, submissionsRes] = await Promise.all([
         fetch('/api/users', { headers }),
         fetch('/api/tasks', { headers }),
         fetch('/api/notifications', { headers }),
-        fetch('/api/departments', { headers })
+        fetch('/api/departments', { headers }),
+        fetch('/api/submissions', { headers })
       ]);
 
       if (usersRes.ok) setUsers(await usersRes.json());
       if (tasksRes.ok) setTasks(await tasksRes.json());
       if (notificationsRes.ok) setNotifications(await notificationsRes.json());
       if (departmentsRes.ok) setDepartments(await departmentsRes.json());
+      if (submissionsRes.ok) setSubmissions(await submissionsRes.json());
     } catch (error) {
       console.error('Failed to load data', error);
     }
@@ -129,8 +131,91 @@ export const TaskProvider = ({ children }) => {
     }));
   };
 
-  const submitProof = () => null;
-  const reviewSubmission = () => null;
+  const submitProof = async (proofData, studentUser) => {
+    const token = localStorage.getItem('tms_token');
+    const response = await fetch('/api/submissions', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        ...proofData,
+        submittedBy: studentUser._id || studentUser.id,
+        submitted_by: studentUser._id || studentUser.id,
+        submitted_by_name: studentUser.name,
+        task_title: proofData.task_title || ''
+      })
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    let data = null;
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected server response: ${response.status} ${response.statusText} - ${text}`);
+    }
+
+    if (!response.ok) throw new Error(data.message || 'Failed to submit proof');
+
+    setSubmissions((prev) => [data.submission, ...prev]);
+    updateTaskStatus(proofData.task_id, 'In Progress');
+    return data.submission;
+  };
+
+  const reviewSubmission = async (submissionId, status, remarks, reviewerUser) => {
+    const token = localStorage.getItem('tms_token');
+    const reviewed_at = new Date().toISOString().replace('T', ' ').slice(0, 16);
+    const response = await fetch(`/api/submissions/${submissionId}`, {
+      method: 'PATCH',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        status,
+        review_remarks: remarks,
+        reviewed_by: reviewerUser?.name || reviewerUser?.username || '',
+        reviewed_at
+      })
+    });
+
+    const contentType = response.headers.get('content-type') || '';
+    let data = null;
+    if (contentType.includes('application/json')) {
+      data = await response.json();
+    } else {
+      const text = await response.text();
+      throw new Error(`Unexpected server response: ${response.status} ${response.statusText} - ${text}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to update submission review');
+    }
+
+    const updatedSubmission = data.submission;
+    setSubmissions((prev) => prev.map((sub) => {
+      if (sub.id === submissionId || sub._id === submissionId) {
+        return updatedSubmission;
+      }
+      return sub;
+    }));
+
+    if (updatedSubmission?.task_id) {
+      if (status === 'Approved') {
+        updateTaskStatus(updatedSubmission.task_id, 'Completed');
+      } else if (status === 'Rejected') {
+        updateTaskStatus(updatedSubmission.task_id, 'Rejected');
+      } else {
+        updateTaskStatus(updatedSubmission.task_id, 'In Progress');
+      }
+    }
+
+    return updatedSubmission;
+  };
   const raiseQuery = () => null;
   const respondToQuery = () => null;
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useTask } from '../context/TaskContext';
 import { useAuth } from '../context/AuthContext';
+import Card from '../components/common/Card';
 import ReviewSubmissionModal from '../components/modals/ReviewSubmissionModal';
 import StatusBadge from '../components/common/StatusBadge';
 import Button from '../components/common/Button';
@@ -10,12 +11,33 @@ import { Eye, FileText } from 'lucide-react';
 const TABS = ['All', 'Pending', 'Approved', 'Rejected'];
 
 const SubmissionsPage = () => {
-  const { submissions } = useTask();
+  const { submissions, tasks, users } = useTask();
   const { activeRole } = useAuth();
   const [activeTab, setActiveTab] = useState('All');
+  const [adminViewMode, setAdminViewMode] = useState('student');
   const [selectedSub, setSelectedSub] = useState(null);
 
-  const filtered = submissions.filter(s => activeTab === 'All' || s.status === activeTab);
+  const isAdminStudentTask = (sub) => {
+    const task = tasks.find((t) => t.id === sub.task_id || t._id === sub.task_id);
+    if (!task) return false;
+    return task.assigned_to_role === 'student' || task.assignedToRole === 'student' || task.assigned_to === sub.submitted_by || task.assignedTo === sub.submitted_by;
+  };
+
+  const isAdminStaffTask = (sub) => {
+    const task = tasks.find((t) => t.id === sub.task_id || t._id === sub.task_id);
+    if (!task) return false;
+    return task.assigned_to_role === 'staff' || task.assignedToRole === 'staff';
+  };
+
+  const viewSubmissions = activeRole === 'admin'
+    ? submissions.filter((sub) => adminViewMode === 'student' ? isAdminStudentTask(sub) : isAdminStaffTask(sub))
+    : submissions;
+
+  const pendingCount = viewSubmissions.filter(s => s.status === 'Pending').length;
+  const approvedCount = viewSubmissions.filter(s => s.status === 'Approved').length;
+  const rejectedCount = viewSubmissions.filter(s => s.status === 'Rejected').length;
+
+  const filtered = viewSubmissions.filter(s => activeTab === 'All' || s.status === activeTab);
 
   return (
     <div className="space-y-6">
@@ -27,6 +49,38 @@ const SubmissionsPage = () => {
             ? 'Track your uploaded proof documents and review results.'
             : 'Review and approve/reject student uploaded proof documents.'}
         </p>
+      </div>
+
+      {/* Submission Summary */}
+      {activeRole === 'admin' && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setAdminViewMode('student')}
+            className={`px-4 py-2 rounded-2xl text-sm font-semibold ${adminViewMode === 'student' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+          >
+            Student Task Submissions
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminViewMode('staff')}
+            className={`px-4 py-2 rounded-2xl text-sm font-semibold ${adminViewMode === 'staff' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+          >
+            Staff Task Submissions
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card title="Pending Reviews" subtitle="Awaiting staff/admin action">
+          <p className="text-3xl font-black text-amber-600">{pendingCount}</p>
+        </Card>
+        <Card title="Approved" subtitle="Verified student submissions">
+          <p className="text-3xl font-black text-emerald-600">{approvedCount}</p>
+        </Card>
+        <Card title="Rejected" subtitle="Needs resubmission">
+          <p className="text-3xl font-black text-rose-600">{rejectedCount}</p>
+        </Card>
       </div>
 
       {/* Filter Tabs */}
@@ -92,27 +146,50 @@ const SubmissionsPage = () => {
               )}
             </td>
             <td className="px-4 py-3.5">
-              {(activeRole === 'staff' || activeRole === 'admin') ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  icon={Eye}
-                  onClick={() => setSelectedSub(sub)}
-                >
-                  Review
-                </Button>
-              ) : (
-                sub.review_remarks ? (
-                  <button
-                    onClick={() => setSelectedSub(sub)}
-                    className="text-xs text-blue-600 hover:underline font-medium"
+              {(() => {
+                const task = tasks.find((t) => t.id === sub.task_id || t._id === sub.task_id);
+                const creator = users.find((u) => u.id === task?.created_by || u._id === task?.created_by || u.id === task?.createdBy || u._id === task?.createdBy);
+                const assignedStudentTask = task && ((task.assigned_to_role === 'student' || task.assignedToRole === 'student') || (task.assigned_to === sub.submitted_by || task.assignedTo === sub.submitted_by));
+                const canReviewAction = activeRole === 'staff' || (activeRole === 'admin' && adminViewMode === 'staff');
+
+                if (activeRole === 'student') {
+                  return sub.review_remarks ? (
+                    <button
+                      onClick={() => setSelectedSub(sub)}
+                      className="text-xs text-blue-600 hover:underline font-medium"
+                    >
+                      View Remarks
+                    </button>
+                  ) : (
+                    <span className="text-xs text-slate-400">Awaiting review</span>
+                  );
+                }
+
+                if (canReviewAction) {
+                  return (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      icon={Eye}
+                      onClick={() => setSelectedSub(sub)}
+                    >
+                      Review
+                    </Button>
+                  );
+                }
+
+                return (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon={Eye}
+                    disabled
+                    className="opacity-50 cursor-not-allowed"
                   >
-                    View Remarks
-                  </button>
-                ) : (
-                  <span className="text-xs text-slate-400">Awaiting review</span>
-                )
-              )}
+                    View Only
+                  </Button>
+                );
+              })()}
             </td>
           </>
         )}

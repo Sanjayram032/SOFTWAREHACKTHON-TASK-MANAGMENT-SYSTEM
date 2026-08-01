@@ -36,6 +36,10 @@ const StaffDashboard = () => {
     (t.created_by === currentUserId || t.createdBy === currentUserId) &&
     t.assigned_to_role === 'student'
   );
+  const staffSubmissionTasks = staffAssignedStudentTasks.map((task) => ({
+    ...task,
+    submission: submissions.find((sub) => sub.task_id === task.id || sub.task_id === task._id)
+  }));
 
   // Staff metrics
   const adminTasksCount = adminAssignedTasks.length;
@@ -162,6 +166,56 @@ const StaffDashboard = () => {
             <p className="text-[11px] text-slate-500 mt-2">Tasks you have delegated to students.</p>
           </div>
         </div>
+      </Card>
+
+      <Card
+        title="Student Submission Review"
+        subtitle="Review proof uploaded by assigned students"
+        action={
+          <Link to="/submissions" className="text-xs font-bold text-blue-600 hover:underline">
+            Open Full Review Page →
+          </Link>
+        }
+      >
+        <Table
+          columns={[
+            { header: 'Task Title' },
+            { header: 'Assigned Student' },
+            { header: 'Priority' },
+            { header: 'Deadline' },
+            { header: 'Status' },
+            { header: 'Actions' }
+          ]}
+          data={staffSubmissionTasks}
+          emptyText="No student submissions found yet."
+          renderRow={(task) => (
+            <>
+              <td className="px-4 py-3.5 font-bold text-slate-900 text-xs max-w-52">
+                <span className="line-clamp-2">{task.title}</span>
+              </td>
+              <td className="px-4 py-3.5 text-xs text-slate-800 font-semibold">{task.assigned_to_name}</td>
+              <td className="px-4 py-3.5 text-xs text-slate-600">{task.priority}</td>
+              <td className="px-4 py-3.5 text-xs text-slate-600">{task.deadline}</td>
+              <td className="px-4 py-3.5 whitespace-nowrap">
+                <StatusBadge status={task.submission?.status || 'Pending'} />
+              </td>
+              <td className="px-4 py-3.5">
+                {task.submission ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    icon={Eye}
+                    onClick={() => setSelectedSubmission(task.submission)}
+                  >
+                    Review Proof
+                  </Button>
+                ) : (
+                  <span className="text-[11px] text-slate-400">Awaiting Upload</span>
+                )}
+              </td>
+            </>
+          )}
+        />
       </Card>
 
       {/* Modals */}

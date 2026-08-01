@@ -25,6 +25,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/tms';
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret';
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean);
 
 const defaultDepartments = [
   'Administration & Academic Affairs',
@@ -63,6 +64,7 @@ let store = {
   mode: 'memory',
   users: [],
   tasks: [],
+  submissions: [],
   notifications: [],
   departments: [...defaultDepartments]
 };
@@ -213,6 +215,7 @@ const seedMemoryData = async () => {
     read_status: false,
     createdAt: new Date()
   }];
+  store.submissions = [];
 };
 
 const sendNotification = async ({ userId, type, title, message }) => {
@@ -317,6 +320,45 @@ const createTaskRecord = async (payload) => {
   return normalizeTask(task);
 };
 
+const normalizeSubmission = (submission) => {
+  const source = submission && typeof submission.toObject === 'function' ? submission.toObject() : submission;
+  const id = source._id?.toString() || source.id;
+  return {
+    ...source,
+    id,
+    _id: id,
+    task_id: source.taskId || source.task_id || '',
+    task_title: source.task_title || source.taskTitle || '',
+    submitted_by: source.submittedBy || source.submitted_by || '',
+    submitted_by_name: source.submitted_by_name || source.submittedByName || '',
+    file_name: source.file_name || source.fileName || '',
+    file_size: source.file_size || source.fileSize || '',
+    submitted_at: source.submitted_at || source.submittedAt || '',
+    review_remarks: source.review_remarks || source.reviewRemarks || '',
+    reviewed_by: source.reviewed_by || source.reviewedBy || '',
+    reviewed_at: source.reviewed_at || source.reviewedAt || ''
+  };
+};
+
+const listSubmissions = async () => store.submissions.map(normalizeSubmission);
+const createSubmissionRecord = async (payload) => {
+  const submission = {
+    _id: createId('submission'),
+    id: createId('submission'),
+    ...payload,
+    status: payload.status || 'Pending'
+  };
+  store.submissions.unshift(submission);
+  return normalizeSubmission(submission);
+};
+
+const updateSubmissionRecord = async (submissionId, updates) => {
+  const submission = store.submissions.find((sub) => sub._id === submissionId || sub.id === submissionId);
+  if (!submission) return null;
+  Object.assign(submission, updates);
+  return normalizeSubmission(submission);
+};
+
 const listNotifications = async (userId) => store.notifications.filter((n) => n.userId === userId || n.user_id === userId).map(normalizeNotification);
 const markNotificationReadRecord = async (notificationId) => {
   const notification = store.notifications.find((n) => n._id === notificationId || n.id === notificationId);
@@ -400,7 +442,8 @@ const verifyGoogleToken = async (idToken) => {
     throw new Error('Invalid Google token');
   }
   const payload = await response.json();
-  if (process.env.GOOGLE_CLIENT_ID && payload.aud !== process.env.GOOGLE_CLIENT_ID) {
+  const expectedClientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
+  if (expectedClientId && payload.aud !== expectedClientId) {
     throw new Error('Google client ID mismatch');
   }
   if (payload.email_verified !== 'true' && payload.email_verified !== true) {
@@ -417,14 +460,22 @@ app.post('/api/auth/google', async (req, res) => {
     let user = await findUserByEmail(email);
 
     if (!user) {
-      const role = email.endsWith('@student.edu') ? 'student' : email.endsWith('@university.edu') ? 'staff' : 'student';
+      const isAdmin = ADMIN_EMAILS.includes(email);
+      const role = isAdmin
+        ? 'admin'
+        : email.endsWith('@student.edu')
+          ? 'student'
+          : 'staff';
+
       user = await createUser({
         name: googlePayload.name || email.split('@')[0],
         email,
         password: '',
         role,
         department: 'Academic Affairs',
-        phone: ''
+        phone: googlePayload.phone_number || '',
+        avatar: googlePayload.picture || '',
+        locale: googlePayload.locale || ''
       });
     }
 
@@ -564,8 +615,104 @@ app.get('/api/notifications', async (req, res) => {
     res.status(401).json({ message: 'Invalid token' });
   }
 });
+
+app.get('/api/submissions', async (req, res) => {
   try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '');
+    const payload = jwt.verify(token, JWT_SECRET);
+    const subs = await listSubmissions();
+    res.json(subs);
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+});
+
+app.post('/api/submissions', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '');
+    jwt.verify(token, JWT_SECRET);
+
+    const { task_id, task_title, submittedBy, submitted_by, submitted_by_name, file_name, file_size, remarks } = req.body;
+    const submission = await createSubmissionRecord({
+      task_id: task_id || req.body.taskId,
+      task_title,
+      submitted_by: submittedBy || submitted_by,
+      submitted_by_name,
+      file_name,
+      file_size,
+      submitted_at: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      status: 'Pending',
+      review_remarks: remarks || '',
+      reviewed_by: '',
+      reviewed_at: ''
+    });
+
+    if (submission) {
+      const task = store.tasks.find((item) => item.id === task_id || item._id === task_id);
+      if (task) {
+        task.status = 'In Progress';
+      }
+    }
+
+    res.status(201).json({ submission });
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+});
+
+app.patch('/api/submissions/:id', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '');
+    const payload = jwt.verify(token, JWT_SECRET);
+
+    const { status, review_remarks, reviewed_by, reviewed_at } = req.body;
+    const submission = store.submissions.find((sub) => sub._id === req.params.id || sub.id === req.params.id);
+    if (!submission) {
+      return res.status(404).json({ message: 'Submission not found' });
+    }
+
+    const task = store.tasks.find((item) => item.id === submission.task_id || item._id === submission.task_id);
+    const taskCreator = task ? store.users.find((u) => u._id === task.created_by || u.id === task.created_by || u._id === task.createdBy || u.id === task.createdBy) : null;
+    const assignedStudentTask = task && (task.assigned_to_role === 'student' || task.assignedToRole === 'student' || task.assigned_to === submission.submitted_by || task.assignedTo === submission.submitted_by);
+    const isStaffAssignedStudentTask = assignedStudentTask && taskCreator?.role === 'staff';
+
+    if (payload.role === 'admin' && isStaffAssignedStudentTask) {
+      return res.status(403).json({ message: 'Admin cannot review staff-assigned student tasks' });
+    }
+
+    const updatedSubmission = await updateSubmissionRecord(req.params.id, {
+      status,
+      review_remarks,
+      reviewed_by,
+      reviewed_at
+    });
+
+    if (task) {
+      if (status === 'Approved') {
+        task.status = 'Completed';
+      } else if (status === 'Rejected') {
+        task.status = 'Rejected';
+      } else {
+        task.status = 'In Progress';
+      }
+    }
+
+    res.json({ submission: updatedSubmission });
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid token' });
+  }
+});
+
+app.patch('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.replace('Bearer ', '');
+    const payload = jwt.verify(token, JWT_SECRET);
     const notification = await markNotificationReadRecord(req.params.id);
+    if (!notification) return res.status(404).json({ message: 'Notification not found' });
     res.json(notification);
   } catch (error) {
     res.status(500).json({ message: error.message });

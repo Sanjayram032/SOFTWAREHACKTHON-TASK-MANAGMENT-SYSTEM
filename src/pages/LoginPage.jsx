@@ -4,15 +4,14 @@ import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/common/Input';
 import Button from '../components/common/Button';
 import ForgotPasswordModal from '../components/modals/ForgotPasswordModal';
-import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, GraduationCap } from 'lucide-react';
+import { Lock, Mail, ArrowRight } from 'lucide-react';
 
 const LoginPage = () => {
   const { login, googleSignIn } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('arthur.p@university.edu');
-  const [password, setPassword] = useState('password123');
-  const [rolePreset, setRolePreset] = useState('admin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [googleError, setGoogleError] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
@@ -81,20 +80,6 @@ const LoginPage = () => {
     }
   };
 
-  const handleRolePresetSelect = (role) => {
-    setRolePreset(role);
-    if (role === 'admin') {
-      setEmail('arthur.p@university.edu');
-      setPassword('password123');
-    } else if (role === 'staff') {
-      setEmail('sarah.j@university.edu');
-      setPassword('password123');
-    } else {
-      setEmail('alex.rivera@student.edu');
-      setPassword('password123');
-    }
-  };
-
   const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -140,49 +125,6 @@ const LoginPage = () => {
           </div>
 
           {/* Quick Preset Selector for Easy Testing */}
-          <div className="mb-6 bg-slate-50 p-3 rounded-2xl border border-slate-200/80">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">Select Quick Test Persona:</p>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => handleRolePresetSelect('admin')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                  rolePreset === 'admin' 
-                    ? 'bg-blue-600 text-white shadow-xs' 
-                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Admin</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleRolePresetSelect('staff')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                  rolePreset === 'staff' 
-                    ? 'bg-blue-600 text-white shadow-xs' 
-                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <UserCheck className="w-3.5 h-3.5" />
-                <span>Staff</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleRolePresetSelect('student')}
-                className={`py-2 px-3 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                  rolePreset === 'student' 
-                    ? 'bg-blue-600 text-white shadow-xs' 
-                    : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-                }`}
-              >
-                <GraduationCap className="w-3.5 h-3.5" />
-                <span>Student</span>
-              </button>
-            </div>
-          </div>
 
           {/* Form */}
           <form onSubmit={handleLoginSubmit} className="space-y-4">
