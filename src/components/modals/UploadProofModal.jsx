@@ -9,9 +9,12 @@ import { UploadCloud, FileText, CheckCircle2 } from 'lucide-react';
 const UploadProofModal = ({ isOpen, onClose, defaultTaskId = null }) => {
   const { tasks, submitProof } = useTask();
   const { currentUser } = useAuth();
+  const currentUserId = currentUser?._id || currentUser?.id;
 
-  // Filter tasks assigned to current student
-  const studentTasks = tasks.filter(t => t.assigned_to === currentUser.id || t.assigned_to_role === 'student');
+  // Filter tasks assigned only to this student
+  const studentTasks = tasks.filter(
+    (t) => t.assigned_to === currentUserId || t.assignedTo === currentUserId
+  );
 
   const [formData, setFormData] = useState({
     task_id: defaultTaskId || (studentTasks[0] ? studentTasks[0].id : ''),
@@ -19,6 +22,16 @@ const UploadProofModal = ({ isOpen, onClose, defaultTaskId = null }) => {
     file_size: '2.5 MB',
     remarks: ''
   });
+
+  const selectedTask = studentTasks.find(
+    (t) => t.id === formData.task_id || t._id === formData.task_id
+  );
+  const proofFormat = selectedTask?.proof_format || 'Either';
+  const acceptedFiles = proofFormat === 'Photo'
+    ? '.png,.jpg,.jpeg'
+    : proofFormat === 'Document'
+      ? '.pdf,.docx'
+      : '.pdf,.docx,.png,.jpg,.jpeg';
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [errors, setErrors] = useState({});
@@ -52,7 +65,7 @@ const UploadProofModal = ({ isOpen, onClose, defaultTaskId = null }) => {
       isOpen={isOpen}
       onClose={onClose}
       title="Upload Task Completion Proof"
-      subtitle="Submit course certificate, assignment document, or event proof for review"
+      subtitle={`Submit ${proofFormat === 'Photo' ? 'a photo proof' : proofFormat === 'Document' ? 'a document proof' : 'proof document or photo'} based on task requirements`}
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <Select
@@ -74,7 +87,7 @@ const UploadProofModal = ({ isOpen, onClose, defaultTaskId = null }) => {
               type="file" 
               className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               onChange={handleFileChange}
-              accept=".pdf,.docx,.png,.jpg,.jpeg"
+              accept={acceptedFiles}
             />
             <div className="flex flex-col items-center justify-center gap-2">
               {selectedFile ? (

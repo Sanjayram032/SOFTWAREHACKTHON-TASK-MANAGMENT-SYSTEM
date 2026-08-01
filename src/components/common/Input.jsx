@@ -3,6 +3,7 @@ import React from 'react';
 export const Input = ({ 
   label, 
   error, 
+  helpText,
   icon: Icon, 
   type = 'text', 
   className = '', 
@@ -23,6 +24,7 @@ export const Input = ({
           {...props}
         />
       </div>
+      {helpText && <p className="text-[11px] text-slate-500">{helpText}</p>}
       {error && <p className="text-xs text-rose-600">{error}</p>}
     </div>
   );
@@ -32,6 +34,7 @@ export const Select = ({
   label, 
   options = [], 
   error, 
+  helpText,
   icon: Icon, 
   className = '', 
   ...props 
@@ -61,6 +64,7 @@ export const Select = ({
           </svg>
         </div>
       </div>
+      {helpText && <p className="text-[11px] text-slate-500">{helpText}</p>}
       {error && <p className="text-xs text-rose-600">{error}</p>}
     </div>
   );

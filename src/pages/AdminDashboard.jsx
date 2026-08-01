@@ -30,7 +30,7 @@ const AdminDashboard = () => {
   const activeTasks = tasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length;
   const completedTasks = tasks.filter(t => t.status === 'Completed').length;
 
-  const recentTasks = tasks.slice(0, 5);
+  const recentTasks = tasks;
 
   return (
     <div className="space-y-8">
@@ -111,11 +111,11 @@ const AdminDashboard = () => {
 
       {/* Recent Tasks Table */}
       <Card 
-        title="Recent Institutional Directives" 
-        subtitle="Live snapshot of top-level tasks assigned to department staff"
+        title="All Institutional Tasks" 
+        subtitle="Tasks currently assigned across staff and student workflows"
         action={
           <Link to="/tasks" className="text-xs font-bold text-blue-600 hover:underline">
-            View All Tasks →
+            Open Task Management →
           </Link>
         }
       >

@@ -14,6 +14,7 @@ const CreateTaskModal = ({ isOpen, onClose }) => {
     description: '',
     category: 'Subject Assignment',
     priority: 'Medium',
+    proof_format: 'Either',
     deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     assigned_to: '',
     parent_task_id: ''
@@ -50,6 +51,7 @@ const CreateTaskModal = ({ isOpen, onClose }) => {
       description: '',
       category: 'Subject Assignment',
       priority: 'Medium',
+      proof_format: 'Either',
       deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       assigned_to: '',
       parent_task_id: ''
@@ -105,6 +107,14 @@ const CreateTaskModal = ({ isOpen, onClose }) => {
             options={['Low', 'Medium', 'High']}
           />
         </div>
+
+        <Select
+          label="Preferred Proof Format"
+          value={formData.proof_format}
+          onChange={(e) => setFormData({ ...formData, proof_format: e.target.value })}
+          options={['Either', 'Document', 'Photo']}
+          helpText="Choose whether the assignee should upload a document, a photo, or either format."
+        />
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input

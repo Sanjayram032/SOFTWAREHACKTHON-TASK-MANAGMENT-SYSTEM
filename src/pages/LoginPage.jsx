@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/common/Input';
@@ -7,14 +7,79 @@ import ForgotPasswordModal from '../components/modals/ForgotPasswordModal';
 import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, GraduationCap } from 'lucide-react';
 
 const LoginPage = () => {
-  const { login } = useAuth();
+  const { login, googleSignIn } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('arthur.p@university.edu');
   const [password, setPassword] = useState('password123');
   const [rolePreset, setRolePreset] = useState('admin');
   const [error, setError] = useState('');
+  const [googleError, setGoogleError] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+
+  useEffect(() => {
+    if (!googleClientId) return;
+
+    const renderButton = () => {
+      if (!window.google?.accounts?.id) return;
+      window.google.accounts.id.initialize({
+        client_id: googleClientId,
+        callback: handleGoogleCredentialResponse,
+        ux_mode: 'popup'
+      });
+      window.google.accounts.id.renderButton(document.getElementById('google-signin-button'), {
+        theme: 'outline',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'rectangular'
+      });
+    };
+
+    const existingScript = document.getElementById('google-client-script');
+    if (existingScript) {
+      renderButton();
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = 'google-client-script';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = renderButton;
+    script.onerror = () => setGoogleError('Failed to load Google sign-in.');
+    document.body.appendChild(script);
+  }, [googleClientId]);
+
+  const handleGoogleCredentialResponse = async (credentialResponse) => {
+    setError('');
+    setGoogleError('');
+
+    if (!credentialResponse?.credential) {
+      setGoogleError('Google sign-in failed.');
+      return;
+    }
+
+    const result = await googleSignIn(credentialResponse.credential);
+    if (!result.success) {
+      setGoogleError(result.message || 'Google sign-in failed.');
+      return;
+    }
+
+    const normalizedEmail = (result.user?.email || '').toLowerCase();
+    if (normalizedEmail.includes('@student.edu')) {
+      navigate('/student/dashboard');
+    } else if (normalizedEmail.includes('@university.edu')) {
+      if ((result.user?.role || 'admin') === 'staff') {
+        navigate('/staff/dashboard');
+      } else {
+        navigate('/admin/dashboard');
+      }
+    } else {
+      navigate('/');
+    }
+  };
 
   const handleRolePresetSelect = (role) => {
     setRolePreset(role);
@@ -30,21 +95,20 @@ const LoginPage = () => {
     }
   };
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
-    const success = login(email, password);
-    if (!success) {
-      setError('Authentication failed. Please use a registered institutional email.');
+    setError('');
+    const result = await login(email, password);
+    if (!result.success) {
+      setError(result.message || 'Authentication failed. Please use a registered institutional email.');
       return;
     }
 
-    setError('');
-    const normalizedEmail = email.toLowerCase();
+    const normalizedEmail = (result.user?.email || email).toLowerCase();
     if (normalizedEmail.includes('@student.edu')) {
       navigate('/student/dashboard');
     } else if (normalizedEmail.includes('@university.edu')) {
-      const staffEmails = ['sarah.j@university.edu', 'robert.c@university.edu', 'elena.r@university.edu', 'maya.s@university.edu'];
-      if (staffEmails.includes(normalizedEmail)) {
+      if ((result.user?.role || 'admin') === 'staff') {
         navigate('/staff/dashboard');
       } else {
         navigate('/admin/dashboard');
@@ -55,7 +119,7 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-[580px]">
+    <div className="bg-white rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12 min-h-145">
       {/* Left Form Section */}
       <div className="lg:col-span-7 p-8 sm:p-12 flex flex-col justify-between">
         <div>
@@ -163,6 +227,14 @@ const LoginPage = () => {
             >
               Sign In to Dashboard
             </Button>
+            {googleClientId ? (
+              <div className="mt-4">
+                <div id="google-signin-button" />
+                {googleError && <p className="text-sm text-rose-600 mt-2">{googleError}</p>}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 mt-3">Google sign-in is not configured yet.</p>
+            )}
             {error && (
               <p className="text-sm text-rose-600 mt-2">{error}</p>
             )}

@@ -15,14 +15,31 @@ const STATUSES = ['All', 'Pending', 'In Progress', 'Completed', 'Overdue', 'Reje
 
 const TaskManagementPage = () => {
   const { tasks } = useTask();
-  const { activeRole } = useAuth();
+  const { currentUser, activeRole } = useAuth();
   const [createOpen, setCreateOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [taskSection, setTaskSection] = useState('admin');
+  const currentUserId = currentUser?._id || currentUser?.id;
+
+  const adminAssignedTasks = tasks.filter((task) =>
+    (task.assigned_to === currentUserId || task.assignedTo === currentUserId) &&
+    (task.assigned_to_role === 'staff' || task.assignedToRole === 'staff')
+  );
+  const staffAssignedStudentTasks = tasks.filter((task) =>
+    (task.created_by === currentUserId || task.createdBy === currentUserId) &&
+    (task.assigned_to_role === 'student' || task.assignedToRole === 'student')
+  );
+
+  const visibleTasks = activeRole === 'student'
+    ? tasks.filter((task) => task.assigned_to === currentUserId || task.assignedTo === currentUserId)
+    : activeRole === 'staff'
+      ? (taskSection === 'admin' ? adminAssignedTasks : staffAssignedStudentTasks)
+      : tasks;
   const [filterCategory, setFilterCategory] = useState('All');
   const [filterPriority, setFilterPriority] = useState('All');
   const [filterStatus, setFilterStatus] = useState('All');
 
-  const filtered = tasks.filter(t => {
+  const filtered = visibleTasks.filter(t => {
     const matchSearch = t.title.toLowerCase().includes(search.toLowerCase()) || 
                         t.assigned_to_name?.toLowerCase().includes(search.toLowerCase());
     const matchCat = filterCategory === 'All' || t.category === filterCategory;
@@ -51,6 +68,28 @@ const TaskManagementPage = () => {
           </Button>
         )}
       </div>
+
+      {/* Task Section Tabs for Staff */}
+      {activeRole === 'staff' && (
+        <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm">
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => setTaskSection('admin')}
+              className={`px-4 py-2 rounded-2xl text-sm font-semibold ${taskSection === 'admin' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+            >
+              Admin Assigned Tasks
+            </button>
+            <button
+              type="button"
+              onClick={() => setTaskSection('student')}
+              className={`px-4 py-2 rounded-2xl text-sm font-semibold ${taskSection === 'student' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+            >
+              Student Assignments
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm">
@@ -104,7 +143,7 @@ const TaskManagementPage = () => {
       {/* Results Count */}
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
         <Filter className="w-4 h-4" />
-        Showing <span className="text-blue-600 font-bold">{filtered.length}</span> of {tasks.length} tasks
+        Showing <span className="text-blue-600 font-bold">{filtered.length}</span> of {visibleTasks.length} tasks
       </div>
 
       {/* Tasks Table */}

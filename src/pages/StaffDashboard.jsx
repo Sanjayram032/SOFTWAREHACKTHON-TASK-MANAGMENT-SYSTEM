@@ -6,6 +6,7 @@ import Button from '../components/common/Button';
 import Table from '../components/common/Table';
 import StatusBadge from '../components/common/StatusBadge';
 import CreateTaskModal from '../components/modals/CreateTaskModal';
+import AddUserModal from '../components/modals/AddUserModal';
 import ReviewSubmissionModal from '../components/modals/ReviewSubmissionModal';
 import { 
   CheckSquare, 
@@ -19,19 +20,30 @@ import {
 import { Link } from 'react-router-dom';
 
 const StaffDashboard = () => {
-  const { tasks, users, submissions } = useTask();
+  const { tasks, users, submissions, updateTaskStatus } = useTask();
   const { currentUser } = useAuth();
 
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
+  const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const currentUserId = currentUser?._id || currentUser?.id;
+
+  const adminAssignedTasks = tasks.filter((t) =>
+    (t.assigned_to === currentUserId || t.assignedTo === currentUserId) &&
+    t.assigned_to_role === 'staff'
+  );
+  const staffAssignedStudentTasks = tasks.filter((t) =>
+    (t.created_by === currentUserId || t.createdBy === currentUserId) &&
+    t.assigned_to_role === 'student'
+  );
 
   // Staff metrics
-  const assignedTasksCount = tasks.filter(t => t.assigned_to === currentUser.id || t.created_by === currentUser.id).length;
-  const pendingReviewsCount = submissions.filter(s => s.status === 'Pending').length;
-  const managedStudentsCount = users.filter(u => u.role === 'student' && u.supervisor_id === currentUser.id).length || 3;
-  const completedTasksCount = tasks.filter(t => t.status === 'Completed').length;
-
-  const studentTasks = tasks.filter(t => t.assigned_to_role === 'student' || t.created_by === currentUser.id);
+  const adminTasksCount = adminAssignedTasks.length;
+  const studentDelegationsCount = staffAssignedStudentTasks.length;
+  const assignedTasksCount = adminTasksCount + studentDelegationsCount;
+  const pendingReviewsCount = submissions.filter((s) => s.status === 'Pending').length;
+  const managedStudentsCount = users.filter((u) => u.role === 'student' && u.supervisor_id === currentUserId).length || 3;
+  const completedTasksCount = tasks.filter((t) => t.status === 'Completed').length;
 
   return (
     <div className="space-y-8">
@@ -45,12 +57,15 @@ const StaffDashboard = () => {
           <p className="text-xs text-slate-500 mt-0.5">Delegate directives to students and review submitted proof documents.</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <Link to="/settings">
             <Button variant="outline" icon={HelpCircle}>
               Raise Query to Admin
             </Button>
           </Link>
+          <Button variant="secondary" icon={Plus} onClick={() => setAddStudentOpen(true)}>
+            Add Student
+          </Button>
           <Button variant="primary" icon={Plus} onClick={() => setCreateTaskOpen(true)}>
             Assign Task to Student
           </Button>
@@ -62,14 +77,27 @@ const StaffDashboard = () => {
         <Card hover={true}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Assigned Tasks</p>
-              <h3 className="text-3xl font-black text-slate-900 mt-1">{assignedTasksCount}</h3>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Admin Assigned Tasks</p>
+              <h3 className="text-3xl font-black text-slate-900 mt-1">{adminTasksCount}</h3>
             </div>
             <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
               <CheckSquare className="w-6 h-6" />
             </div>
           </div>
-          <p className="text-[11px] text-slate-500 mt-3">From Admin & self-delegated</p>
+          <p className="text-[11px] text-slate-500 mt-3">Assigned to you by the administration</p>
+        </Card>
+
+        <Card hover={true}>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Student Delegations</p>
+              <h3 className="text-3xl font-black text-slate-900 mt-1">{studentDelegationsCount}</h3>
+            </div>
+            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-2xl">
+              <GraduationCap className="w-6 h-6" />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-3">Tasks you have assigned to students</p>
         </Card>
 
         <Card hover={true}>
@@ -112,59 +140,38 @@ const StaffDashboard = () => {
         </Card>
       </div>
 
-      {/* Student Task List Table */}
-      <Card 
-        title="Student Task Tracking List" 
-        subtitle="Active breakdown tasks assigned to undergraduate & postgraduate students"
-        action={
-          <Link to="/submissions" className="text-xs font-bold text-blue-600 hover:underline">
+      <Card title="Task Overview" subtitle="See your current assigned and delegated task counts" action={
+        <div className="flex flex-wrap items-center gap-3">
+          <Link to="/tasks" className="text-xs font-bold text-blue-600 hover:underline">
+            Open Task Page →
+          </Link>
+          <Link to="/submissions" className="text-xs font-bold text-slate-600 hover:text-blue-600 hover:underline">
             Review Submissions ({pendingReviewsCount}) →
           </Link>
-        }
-      >
-        <Table
-          columns={[
-            { header: 'Task Title' },
-            { header: 'Assigned Student' },
-            { header: 'Priority' },
-            { header: 'Deadline' },
-            { header: 'Status' },
-            { header: 'Actions' }
-          ]}
-          data={studentTasks}
-          renderRow={(task) => {
-            const relatedSubmission = submissions.find(s => s.task_id === task.id);
-            return (
-              <>
-                <td className="px-4 py-3.5 font-bold text-slate-900 text-xs">{task.title}</td>
-                <td className="px-4 py-3.5 text-xs text-slate-800 font-semibold">{task.assigned_to_name}</td>
-                <td className="px-4 py-3.5 text-xs text-slate-600 font-medium">{task.priority}</td>
-                <td className="px-4 py-3.5 text-xs text-slate-600">{task.deadline}</td>
-                <td className="px-4 py-3.5">
-                  <StatusBadge status={task.status} />
-                </td>
-                <td className="px-4 py-3.5">
-                  {relatedSubmission ? (
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      icon={Eye} 
-                      onClick={() => setSelectedSubmission(relatedSubmission)}
-                    >
-                      Review Proof
-                    </Button>
-                  ) : (
-                    <span className="text-[11px] text-slate-400 font-medium">Awaiting Upload</span>
-                  )}
-                </td>
-              </>
-            );
-          }}
-        />
+        </div>
+      }>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="rounded-2xl border border-slate-200/80 p-4 bg-slate-50">
+            <p className="text-xs font-semibold text-slate-500 uppercase">Admin Assigned Tasks</p>
+            <p className="text-3xl font-black text-slate-900 mt-3">{adminAssignedTasks.length}</p>
+            <p className="text-[11px] text-slate-500 mt-2">Tasks assigned to you by administration.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200/80 p-4 bg-slate-50">
+            <p className="text-xs font-semibold text-slate-500 uppercase">Student Delegations</p>
+            <p className="text-3xl font-black text-slate-900 mt-3">{staffAssignedStudentTasks.length}</p>
+            <p className="text-[11px] text-slate-500 mt-2">Tasks you have delegated to students.</p>
+          </div>
+        </div>
       </Card>
 
       {/* Modals */}
       <CreateTaskModal isOpen={createTaskOpen} onClose={() => setCreateTaskOpen(false)} />
+      <AddUserModal
+        isOpen={addStudentOpen}
+        onClose={() => setAddStudentOpen(false)}
+        defaultRole="student"
+        hideRole={true}
+      />
       {selectedSubmission && (
         <ReviewSubmissionModal
           isOpen={!!selectedSubmission}

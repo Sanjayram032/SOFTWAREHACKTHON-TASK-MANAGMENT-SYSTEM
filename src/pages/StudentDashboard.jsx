@@ -18,9 +18,12 @@ const StudentDashboard = () => {
   const { currentUser } = useAuth();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const currentUserId = currentUser?._id || currentUser?.id;
 
-  // Filter tasks for this student
-  const myTasks = tasks.filter(t => t.assigned_to === currentUser.id || t.assigned_to_role === 'student');
+  // Filter only tasks assigned to this student
+  const myTasks = tasks.filter(
+    (t) => t.assigned_to === currentUserId || t.assignedTo === currentUserId
+  );
   const pendingTasks = myTasks.filter(t => t.status === 'Pending' || t.status === 'In Progress').length;
   const completedTasks = myTasks.filter(t => t.status === 'Completed').length;
   const upcomingDeadlines = myTasks.filter(t => {

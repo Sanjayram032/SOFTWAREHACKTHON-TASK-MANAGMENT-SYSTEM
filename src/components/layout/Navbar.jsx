@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useTask } from '../../context/TaskContext';
@@ -19,8 +19,22 @@ const Navbar = ({ onOpenSidebar }) => {
   const { notifications } = useTask();
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileMenuRef = useRef(null);
 
   const unreadCount = notifications.filter(n => !n.read_status && (n.user_id === currentUser?.id || activeRole === 'admin')).length;
+
+  useEffect(() => {
+    if (!profileOpen) return;
+
+    const handleClickOutside = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setProfileOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [profileOpen]);
 
   return (
     <header className="sticky top-0 z-30 h-16 glass-nav px-4 sm:px-6 flex items-center justify-between gap-4">
@@ -68,7 +82,7 @@ const Navbar = ({ onOpenSidebar }) => {
         </button>
 
         {/* Profile Menu Dropdown */}
-        <div className="relative">
+        <div className="relative" ref={profileMenuRef}>
           <button 
             onClick={() => setProfileOpen(!profileOpen)}
             className="flex items-center gap-2 p-1 rounded-xl hover:bg-slate-100 transition-colors focus:outline-hidden"
@@ -84,48 +98,45 @@ const Navbar = ({ onOpenSidebar }) => {
 
           {/* Profile Dropdown Box */}
           {profileOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-              <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95">
-                <div className="px-4 py-2 border-b border-slate-100">
-                  <p className="text-xs font-bold text-slate-900">{currentUser.name}</p>
-                  <p className="text-[10px] text-slate-500 capitalize">{activeRole} • {currentUser.department}</p>
-                </div>
-
-                <div className="py-1">
-                  <Link 
-                    to="/profile"
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    <User className="w-4 h-4" />
-                    <span>My Profile</span>
-                  </Link>
-                  <Link 
-                    to="/settings"
-                    onClick={() => setProfileOpen(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600"
-                  >
-                    <ShieldAlert className="w-4 h-4" />
-                    <span>Settings & Support</span>
-                  </Link>
-                </div>
-
-                <div className="border-t border-slate-100 pt-1">
-                  <button 
-                    onClick={() => {
-                      setProfileOpen(false);
-                      logout();
-                      navigate('/login');
-                    }}
-                    className="w-full flex items-center gap-2 px-4 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    <span>Sign Out</span>
-                  </button>
-                </div>
+            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 z-50 animate-in fade-in zoom-in-95">
+              <div className="px-4 py-2 border-b border-slate-100">
+                <p className="text-xs font-bold text-slate-900">{currentUser.name}</p>
+                <p className="text-[10px] text-slate-500 capitalize">{activeRole} • {currentUser.department}</p>
               </div>
-            </>
+
+              <div className="py-1">
+                <Link 
+                  to="/profile"
+                  onClick={() => setProfileOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600"
+                >
+                  <User className="w-4 h-4" />
+                  <span>My Profile</span>
+                </Link>
+                <Link 
+                  to="/settings"
+                  onClick={() => setProfileOpen(false)}
+                  className="flex items-center gap-2 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-600"
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>Settings & Support</span>
+                </Link>
+              </div>
+
+              <div className="border-t border-slate-100 pt-1">
+                <button 
+                  onClick={() => {
+                    setProfileOpen(false);
+                    logout();
+                    navigate('/login');
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

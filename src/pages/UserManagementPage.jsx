@@ -9,10 +9,9 @@ import { Input, Select } from '../components/common/Input';
 import { UserPlus, Search, Edit2, ShieldOff } from 'lucide-react';
 
 const ROLES = ['All', 'admin', 'staff', 'student'];
-const DEPTS = ['All', 'Computer Science', 'Data Science & AI', 'Electrical Engineering', 'Mechanical Engineering', 'Administration & Academic Affairs'];
 
 const UserManagementPage = () => {
-  const { users } = useTask();
+  const { users, departments } = useTask();
   const { activeRole } = useAuth();
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -77,7 +76,10 @@ const UserManagementPage = () => {
               label="Department"
               value={filterDept}
               onChange={e => setFilterDept(e.target.value)}
-              options={DEPTS}
+              options={[
+                'All',
+                ...departments.filter(Boolean)
+              ]}
             />
           </div>
           <Button variant="outline" onClick={() => { setSearch(''); setFilterRole('All'); setFilterDept('All'); }}>
