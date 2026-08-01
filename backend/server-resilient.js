@@ -137,8 +137,11 @@ const createToken = (user) => jwt.sign({ id: user._id || user.id, email: user.em
 
 const seedMemoryData = async () => {
   if (store.users.length) return;
-
   const hashedPassword = await bcrypt.hash('password123', 10);
+  const hashedTestAdmin = await bcrypt.hash('Admin@1234', 10);
+  const hashedTestStaff = await bcrypt.hash('Staff@1234', 10);
+  const hashedTestStudent = await bcrypt.hash('Student@1234', 10);
+
   const admin = {
     _id: 'user-admin',
     id: 'user-admin',
@@ -182,7 +185,50 @@ const seedMemoryData = async () => {
     avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150'
   };
 
-  store.users = [admin, staff, student];
+  const testAdmin = {
+    _id: 'user-test-admin',
+    id: 'user-test-admin',
+    name: 'Test Admin',
+    email: 'test.admin@university.edu',
+    password: hashedTestAdmin,
+    role: 'admin',
+    department: 'Academic Affairs',
+    phone: '',
+    status: 'Active',
+    avatar: ''
+  };
+
+  const testStaff = {
+    _id: 'user-test-staff',
+    id: 'user-test-staff',
+    name: 'Test Staff',
+    email: 'test.staff@university.edu',
+    password: hashedTestStaff,
+    role: 'staff',
+    department: 'Computer Science',
+    supervisorId: admin._id,
+    supervisor_id: admin._id,
+    phone: '',
+    status: 'Active',
+    avatar: ''
+  };
+
+  const testStudent = {
+    _id: 'user-test-student',
+    id: 'user-test-student',
+    name: 'Test Student',
+    email: 'test.student@university.edu',
+    password: hashedTestStudent,
+    role: 'student',
+    department: 'Computer Science',
+    supervisorId: testStaff._id,
+    supervisor_id: testStaff._id,
+    phone: '',
+    status: 'Active',
+    avatar: ''
+  };
+
+  store.users = [admin, staff, student, testAdmin, testStaff, testStudent];
   store.tasks = [{
     _id: 'task-demo',
     id: 'task-demo',

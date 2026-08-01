@@ -70,12 +70,12 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const googleSignIn = async (idToken) => {
+  const googleSignIn = async (idToken, preferredRole) => {
     try {
       const response = await fetch('/api/auth/google', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ idToken })
+        body: JSON.stringify({ idToken, preferredRole })
       });
 
       let data = {};
@@ -89,6 +89,16 @@ export const AuthProvider = ({ children }) => {
 
       if (!response.ok) {
         return { success: false, message: data.message || response.statusText || 'Google sign-in failed' };
+      }
+
+      if (data.needsRole) {
+        return {
+          success: false,
+          needsRole: true,
+          email: data.email,
+          name: data.name,
+          picture: data.picture
+        };
       }
 
       localStorage.setItem('tms_token', data.token);

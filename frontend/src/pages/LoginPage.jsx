@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/common/Input';
 import Button from '../components/common/Button';
 import ForgotPasswordModal from '../components/modals/ForgotPasswordModal';
+import RoleSelectionModal from '../components/modals/RoleSelectionModal';
 import { Lock, Mail, ArrowRight } from 'lucide-react';
 
 const LoginPage = () => {
@@ -15,7 +16,10 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [googleError, setGoogleError] = useState('');
   const [forgotOpen, setForgotOpen] = useState(false);
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [pendingGoogleToken, setPendingGoogleToken] = useState('');
+  const [googleCandidateEmail, setGoogleCandidateEmail] = useState('');
+  const [googleClientId] = useState(import.meta.env.VITE_GOOGLE_CLIENT_ID || '');
 
   useEffect(() => {
     if (!googleClientId) return;
@@ -61,10 +65,49 @@ const LoginPage = () => {
     }
 
     const result = await googleSignIn(credentialResponse.credential);
+    if (result.needsRole) {
+      setPendingGoogleToken(credentialResponse.credential);
+      setGoogleCandidateEmail(result.email || '');
+      setRoleModalOpen(true);
+      return;
+    }
+
     if (!result.success) {
       setGoogleError(result.message || 'Google sign-in failed.');
       return;
     }
+
+    const normalizedEmail = (result.user?.email || '').toLowerCase();
+    if (normalizedEmail.includes('@student.edu')) {
+      navigate('/student/dashboard');
+    } else if (normalizedEmail.includes('@university.edu')) {
+      if ((result.user?.role || 'admin') === 'staff') {
+        navigate('/staff/dashboard');
+      } else {
+        navigate('/admin/dashboard');
+      }
+    } else {
+      navigate('/');
+    }
+  };
+
+  const handleRoleConfirm = async (role) => {
+    setGoogleError('');
+    setError('');
+
+    if (!pendingGoogleToken) {
+      setGoogleError('Unable to complete Google login. Please try again.');
+      return;
+    }
+
+    const result = await googleSignIn(pendingGoogleToken, role);
+    if (!result.success) {
+      setGoogleError(result.message || 'Google sign-in failed.');
+      return;
+    }
+
+    setRoleModalOpen(false);
+    setPendingGoogleToken('');
 
     const normalizedEmail = (result.user?.email || '').toLowerCase();
     if (normalizedEmail.includes('@student.edu')) {
@@ -221,6 +264,12 @@ const LoginPage = () => {
 
       {/* Forgot Password Modal */}
       <ForgotPasswordModal isOpen={forgotOpen} onClose={() => setForgotOpen(false)} />
+      <RoleSelectionModal
+        isOpen={roleModalOpen}
+        onClose={() => setRoleModalOpen(false)}
+        onConfirm={handleRoleConfirm}
+        email={googleCandidateEmail}
+      />
     </div>
   );
 };
